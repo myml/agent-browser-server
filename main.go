@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -40,10 +41,17 @@ func main() {
 		cmdCtx, cancel := context.WithTimeout(ctx, time.Second*10)
 		defer cancel()
 
+		session := server.ClientSessionFromContext(ctx)
+		if session == nil {
+			return mcp.NewToolResultError("No active session"), nil
+		}
+		slog.Info("session", "session id", session.SessionID())
+
 		var stdoutBuf, stderrBuf bytes.Buffer
 		cmd := exec.CommandContext(cmdCtx, "agent-browser", args...)
 		cmd.Stdout = &stdoutBuf
 		cmd.Stderr = &stderrBuf
+		cmd.Env = append(os.Environ(), "AGENT_BROWSER_SESSION="+session.SessionID())
 		startTime := time.Now()
 		err = cmd.Run()
 
@@ -70,7 +78,7 @@ func main() {
 		return mcp.NewToolResultJSON(response)
 	})
 
-	slog.Info("MCP server initialized, serving on 127.0.0.1:8080")
+	slog.Info("MCP server initialized, serving on http://127.0.0.1:8080/mcp")
 	// Start the stdio server
 	if err := server.NewStreamableHTTPServer(s).Start(":8080"); err != nil {
 		fmt.Printf("Server error: %v\n", err)
